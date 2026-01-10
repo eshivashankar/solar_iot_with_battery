@@ -7,3 +7,8 @@ https://www.youtube.com/watch?v=T70mBHeIOZA
 
 
 
+one of the dimond i found:
+<img width="1364" height="726" alt="image" src="https://github.com/user-attachments/assets/a0773dee-2fe3-4b8a-9971-8e81cfa446f8" />
+
+
+https://docs.slimevr.dev/diy/tracker-schematics.html
