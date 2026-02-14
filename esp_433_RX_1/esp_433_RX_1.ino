@@ -41,15 +41,16 @@ void setup()
     pinMode(motor_pin,OUTPUT);
 
     Serial.println(F("Receiver ready"));
+    digitalWrite(motor_pin, HIGH);
 }
 void motor_on()
 {
-    digitalWrite(motor_pin, HIGH);
+    digitalWrite(motor_pin, LOW);
     flag=1;
 }
 void motor_off()
 {
-    digitalWrite(motor_pin, LOW);
+    digitalWrite(motor_pin, HIGH);
     flag=0;
 }
 // ────────────────────────────────────────────────
