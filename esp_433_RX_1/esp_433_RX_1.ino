@@ -11,6 +11,8 @@
 // ────────────────────────────────────────────────
 
 #define RF_RX_PIN 11      // DATA pin of 433 MHz receiver
+#define motor_pin 13
+char flag=0;
 
 // Message must EXACTLY match transmitter
 struct __attribute__((packed)) TankMessage {
@@ -36,10 +38,20 @@ void setup()
         Serial.println(F("RH_ASK init failed"));
         while (1);
     }
+    pinMode(motor_pin,OUTPUT);
 
     Serial.println(F("Receiver ready"));
 }
-
+void motor_on()
+{
+    digitalWrite(motor_pin, HIGH);
+    flag=1;
+}
+void motor_off()
+{
+    digitalWrite(motor_pin, LOW);
+    flag=0;
+}
 // ────────────────────────────────────────────────
 // LOOP
 // ────────────────────────────────────────────────
@@ -68,10 +80,30 @@ void loop()
             Serial.println(F(" mV"));
 
             Serial.println();
+
+                if(flag ==0)
+                {
+                    if (msg.levelPercent == 25)
+                    {
+                        motor_on();
+                    }
+                }
+                if(flag ==1)
+                {
+                    if (msg.levelPercent == 100)
+                    {
+                        motor_off();
+                    }
+                }
+
+
         }
         else {
             Serial.print(F("Invalid packet size: "));
             Serial.println(buflen);
         }
     }
+
 }
+
+

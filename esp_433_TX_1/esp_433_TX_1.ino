@@ -149,9 +149,9 @@
 #define STATUS_LED_PIN    LED_BUILTIN
 
 #define FLOAT_TOP_PIN     D5
-#define FLOAT_75_PIN      D6
-#define FLOAT_50_PIN      D7
-#define FLOAT_25_PIN      D8
+// #define FLOAT_75_PIN      D6
+// #define FLOAT_50_PIN      D7  //D8 is not working
+#define FLOAT_25_PIN      D7 //D8 is not working
 
 const uint32_t REPORT_INTERVAL_SEC = 180;
 const uint32_t SLEEP_SECONDS = REPORT_INTERVAL_SEC + 8;
@@ -187,8 +187,8 @@ void setup()
     digitalWrite(STATUS_LED_PIN, HIGH);
 
     pinMode(FLOAT_TOP_PIN, INPUT_PULLUP);
-    pinMode(FLOAT_75_PIN, INPUT_PULLUP);
-    pinMode(FLOAT_50_PIN, INPUT_PULLUP);
+    // pinMode(FLOAT_75_PIN, INPUT_PULLUP);
+    // pinMode(FLOAT_50_PIN, INPUT_PULLUP);
     pinMode(FLOAT_25_PIN, INPUT_PULLUP);
 
     blink(3, 80);
@@ -251,6 +251,52 @@ void loop()
 
     ESP.deepSleep(SLEEP_SECONDS * 1000000ULL);
 }
+///
+/*
+void loop()
+{
+    TankMessage msg;
+
+    msg.deviceId     = DEVICE_ID;
+    msg.levelPercent = readTankLevel();
+    msg.battery_mV   = readBatteryVoltage_mV();
+    msg.reserved     = 0;
+
+    Serial.print(F("Device ID: "));
+    Serial.println(msg.deviceId);
+
+    Serial.print(F("Tank level: "));
+    Serial.print(msg.levelPercent);
+    Serial.println(F("%"));
+
+    Serial.print(F("Battery: "));
+    Serial.print(msg.battery_mV);
+    Serial.println(F(" mV"));
+
+    digitalWrite(STATUS_LED_PIN, LOW);
+    bool ok = driver.send((uint8_t*)&msg, sizeof(msg));
+    driver.waitPacketSent();
+    digitalWrite(STATUS_LED_PIN, HIGH);
+
+    Serial.print(F("RF send: "));
+    Serial.println(ok ? F("OK") : F("FAIL"));
+
+    if (ok) blink(2, 40);
+    else    blink(5, 60);
+
+    Serial.print(F("Sleeping for "));
+    Serial.print(SLEEP_SECONDS);
+    Serial.println(F(" seconds"));
+    Serial.flush();
+    
+    delay(100);  // Give serial time to finish
+    
+    // Use RF_DISABLED mode for lowest power consumption
+    ESP.deepSleep(SLEEP_SECONDS * 1000000ULL, WAKE_RF_DISABLED);
+}*/
+
+
+
 
 // ────────────────────────────────────────────────
 // SENSOR FUNCTIONS
@@ -259,8 +305,8 @@ void loop()
 uint8_t readTankLevel()
 {
     if      (digitalRead(FLOAT_TOP_PIN) == LOW) return 100;
-    else if (digitalRead(FLOAT_75_PIN)  == LOW) return 75;
-    else if (digitalRead(FLOAT_50_PIN)  == LOW) return 50;
+    // else if (digitalRead(FLOAT_75_PIN)  == LOW) return 75;
+    // else if (digitalRead(FLOAT_50_PIN)  == LOW) return 50;
     else if (digitalRead(FLOAT_25_PIN)  == LOW) return 25;
     else                                        return 0;
 }
