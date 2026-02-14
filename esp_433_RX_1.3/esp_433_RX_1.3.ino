@@ -11,7 +11,7 @@
 // ────────────────────────────────────────────────
 
 #define RF_RX_PIN       11      // DATA pin of 433 MHz receiver
-#define MOTOR_PIN       13      // Motor/pump control relay
+#define MOTOR_PIN       12      // Motor/pump control relay
 #define STATUS_LED_PIN  LED_BUILTIN  // Optional status LED
 
 // Thresholds for motor control

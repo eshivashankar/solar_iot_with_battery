@@ -1,6 +1,6 @@
 // ================================================================
 //  ESP8266 + 433 MHz ASK Transmitter - VERY LOW POWER VERSION
-//  with Power-Controlled Float Switches
+//  with Power-Controlled Float Switches AND RF Module
 // ================================================================
 
 #include <RH_ASK.h>
@@ -11,10 +11,10 @@
 // CONFIGURATION
 // ────────────────────────────────────────────────
 
-#define RF_TX_PIN         D2       // GPIO4
+#define RF_TX_PIN         D2       // GPIO4 - Data to 433MHz TX
 #define STATUS_LED_PIN    LED_BUILTIN
 
-#define FLOAT_POWER_PIN   D1       // GPIO5 - Powers the float switches
+#define POWER_PIN         D1       // GPIO5 - Powers BOTH float switches AND 433MHz TX module
 #define FLOAT_TOP_PIN     D5       // GPIO14
 #define FLOAT_BOTTOM_PIN  D6       // GPIO12
 
@@ -50,29 +50,24 @@ void setup()
     pinMode(STATUS_LED_PIN, OUTPUT);
     digitalWrite(STATUS_LED_PIN, HIGH);
 
-    // Power control for float switches
-    pinMode(FLOAT_POWER_PIN, OUTPUT);
-    digitalWrite(FLOAT_POWER_PIN, LOW);  // OFF initially
+    // Power control for float switches AND RF module
+    pinMode(POWER_PIN, OUTPUT);
+    digitalWrite(POWER_PIN, LOW);  // OFF initially
 
     pinMode(FLOAT_TOP_PIN, INPUT_PULLUP);
     pinMode(FLOAT_BOTTOM_PIN, INPUT_PULLUP);
 
     blink(3, 80);
 
-    Serial.print(F("Init RF driver... "));
-    if (!driver.init()) {
-        Serial.println(F("FAILED"));
-        while (true) {
-            blink(1, 100);
-            delay(400);
-        }
-    }
-    Serial.println(F("OK"));
-
+    // Note: We do NOT init the RF driver here anymore
+    // It will be initialized in loop() when power is applied
+    
     Serial.println(F("Disabling WiFi"));
     WiFi.mode(WIFI_OFF);
     WiFi.forceSleepBegin();
     delay(1);
+    
+    Serial.println(F("Setup complete"));
 }
 
 // ────────────────────────────────────────────────
@@ -84,7 +79,11 @@ void loop()
     TankMessage msg;
 
     msg.deviceId     = DEVICE_ID;
+    
+    // Step 1: Read tank level (powers sensors briefly)
     msg.levelPercent = readTankLevel();
+    
+    // Step 2: Read battery
     msg.battery_mV   = readBatteryVoltage_mV();
     msg.reserved     = 0;
 
@@ -99,16 +98,37 @@ void loop()
     Serial.print(msg.battery_mV);
     Serial.println(F(" mV"));
 
-    digitalWrite(STATUS_LED_PIN, LOW);
-    bool ok = driver.send((uint8_t*)&msg, sizeof(msg));
-    driver.waitPacketSent();
-    digitalWrite(STATUS_LED_PIN, HIGH);
+    // Step 3: Power ON RF module and send
+    Serial.println(F("Powering RF module ON"));
+    digitalWrite(POWER_PIN, HIGH);
+    delay(100);  // Give RF module time to stabilize
+    
+    // Initialize RF driver (now that power is applied)
+    Serial.print(F("Init RF driver... "));
+    if (!driver.init()) {
+        Serial.println(F("FAILED"));
+        digitalWrite(POWER_PIN, LOW);  // Turn off power on failure
+        blink(5, 60);
+    }
+    else {
+        Serial.println(F("OK"));
+        
+        // Send the message
+        digitalWrite(STATUS_LED_PIN, LOW);
+        bool ok = driver.send((uint8_t*)&msg, sizeof(msg));
+        driver.waitPacketSent();
+        digitalWrite(STATUS_LED_PIN, HIGH);
 
-    Serial.print(F("RF send: "));
-    Serial.println(ok ? F("OK") : F("FAIL"));
+        Serial.print(F("RF send: "));
+        Serial.println(ok ? F("OK") : F("FAIL"));
 
-    if (ok) blink(2, 40);
-    else    blink(5, 60);
+        if (ok) blink(2, 40);
+        else    blink(5, 60);
+    }
+    
+    // Power OFF RF module
+    digitalWrite(POWER_PIN, LOW);
+    Serial.println(F("Powering RF module OFF"));
 
     Serial.print(F("Sleeping for "));
     Serial.print(SLEEP_SECONDS);
@@ -127,7 +147,7 @@ uint8_t readTankLevel()
 {
     // Power ON the float switches
     Serial.println(F("Powering float switches ON"));
-    digitalWrite(FLOAT_POWER_PIN, HIGH);
+    digitalWrite(POWER_PIN, HIGH);
     delay(50);  // Wait for switches to stabilize
     
     // Read the switches
@@ -139,16 +159,16 @@ uint8_t readTankLevel()
     Serial.print(F(", Bottom: "));
     Serial.println(bottom ? "WATER" : "AIR");
     
-    // Power OFF the float switches immediately after reading
-    digitalWrite(FLOAT_POWER_PIN, LOW);
+    // Power OFF the float switches
+    digitalWrite(POWER_PIN, LOW);
     Serial.println(F("Powering float switches OFF"));
     
     // Calculate level
     uint8_t level;
-    if (top && bottom)       level = 100;  // Both in water = full
-    else if (!top && bottom) level = 50;   // Only bottom = half
-    else if (!top && !bottom) level = 0;   // Neither = empty
-    else                     level = 25;   // Top only (shouldn't happen)
+    if (top && bottom)       level = 0;  // Neither = empty
+    // else if (!top && bottom) level = 50;   // Top only (shouldn't happen)
+    else if (!top && !bottom) level = 100;   // Both in water = full
+    else                     level = 25;   // Only bottom = half
     
     return level;
 }
@@ -181,64 +201,78 @@ void blink(uint8_t times, uint16_t ms)
 /*
 ```
 
+## Key Changes:
+
+1. **Renamed to `POWER_PIN`** - Now controls both float switches AND 433MHz module
+2. **RF driver init moved to loop()** - Initialized only when power is applied
+3. **Sequential power control**:
+   - Power ON → Read sensors → Power OFF
+   - Power ON → Init RF → Send → Power OFF
+4. **100ms stabilization** for RF module (they need time to power up)
+
 ## Hardware Wiring:
 ```
-ESP8266                Float Switches
-┌─────────┐           ┌──────────────┐
-│         │           │              │
-│  D1 ────┼──────────►│ VCC (3.3V)   │
-│  (GPIO5)│           │              │
-│         │           │ Top Switch───┼──► D5
-│  D5 ────┼───────────┤              │
-│         │           │ Bottom───────┼──► D6
-│  D6 ────┼───────────┤              │
-│         │           │              │
-│  GND ───┼──────────►│ GND          │
-│         │           │              │
-└─────────┘           └──────────────┘
+ESP8266 D1 (GPIO5)
+      │
+      ├──────────► Float Switch VCC
+      │
+      └──────────► 433MHz TX Module VCC
+      
+All GND connected together
 ```
 
-## Important Notes:
+## Important: Current Considerations
 
-1. **GPIO Current Limit**: ESP8266 GPIO pins can source ~12mA max
-   - If your float switches draw more current, use a **transistor** (2N2222 or 2N7000 MOSFET)
+**Check your D1 pin current capacity:**
 
-2. **If you need more current**, use this circuit:
+- ESP8266 GPIO can source ~12mA max
+- Float switches: ~1-5mA each = 2-10mA total
+- 433MHz TX module: ~20-40mA (during transmission)
+- **TOTAL: 22-50mA** ⚠️
+
+### Solution: Use a Transistor
+
+Since the total current likely exceeds 12mA, you **MUST** use a transistor:
 ```
-           ESP8266 D1
-               │
-               ├──── 1kΩ ────┤ Base
-               │              │
-              GND         (NPN Transistor)
-                              │ Collector
-                              ├──────► Float Switch VCC
-                              │
-                         Emitter
-                              │
-                           3.3V/Vin
+                       3.3V/Vin
+                          │
+                          ├───┐
+                          │   │
+                     Float│   │433MHz TX
+                  Switches│   │Module VCC
+                      VCC │   │
+                          │   │
+                       Collector
+                          │
+                     (NPN Transistor)
+                      2N2222 / BC547
+                          │
+                   Base   │
+              1kΩ ────────┤
+              │           │
+    ESP D1 ───┘        Emitter
+                          │
+                         GND
 ```
 
-3. **Stabilization delay**: The `delay(50)` gives time for the switches to stabilize after power-on. You can reduce this to 10-20ms if needed.
+### Component Values:
+- **Transistor**: 2N2222, BC547, or 2N3904
+- **Base Resistor**: 1kΩ
+- **Power**: Can handle 100mA+ easily
 
-4. **Power Savings**: By powering switches only during reading (~50-100ms every 180 seconds), you save huge amounts of battery compared to continuous power.
-
-## Alternative: Using a P-Channel MOSFET (Best for Low Power)
-
-If you want the absolute best power efficiency:
+### Wiring with Transistor:
 ```
-                    3.3V
-                     │
-                     ├──── 10kΩ ────┐
-                     │               │
-                     │            Gate│
-ESP8266 D1 ─────────┼──────────────►│ P-MOSFET
-      (LOW=ON)      │               │ (IRF9540)
-                    GND           Source
-                                     │
-                              Float Switch VCC
-                                     
-                                  Drain to GND
+ESP8266
+┌─────────┐
+│         │
+│  D1 ────┼──── 1kΩ ───► Base (Transistor)
+│  (GPIO5)│
+│         │              Collector ──► 3.3V
+│  GND ───┼─────────────► Emitter ──► GND
+│         │
+│         │              Float VCC ◄── Collector
+│         │              433MHz VCC ◄─ Collector
+└─────────┘
 
-                                  
 
-                                  */
+*/
